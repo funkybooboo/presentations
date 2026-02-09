@@ -768,6 +768,8 @@ flowchart TB
         APP1 --> OS1 --> HV --> OS0 --> HW1
     end
 
+    VM ~~~ Container
+
     subgraph Container["Container"]
         APP2["App"]
         RT["Container Runtime"]
