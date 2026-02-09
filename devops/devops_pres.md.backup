@@ -1,0 +1,2931 @@
+---
+title: "DevOps: From First Principles to Production"
+author: Nate Stott
+options:
+  end_slide_shorthand: true
+---
+
+# So You Want to Deploy Your Code
+
+```
+Write Code  ->  ???  ->  Users Use Application
+```
+
+**You've built something amazing. Now what?**
+
+- Where does it run?
+- How do users access it?
+- What happens when something breaks at 3am?
+- How do you update it without taking everything down?
+
+**Today we'll fill in that box.**
+
+---
+
+# What We'll Cover
+
+| Part | Topic | The Big Question |
+|------|-------|------------------|
+| 1 | History | How did we get here? |
+| 2 | DevOps Philosophy | What changed? |
+| 3 | Containers | Why Docker? |
+| 4 | Git Branching | Why does it matter? |
+| 5 | CI/CD | How do we automate? |
+| 6 | The Cloud | Why did it win? |
+| 7 | Scale Issues | What breaks? |
+| 8 | Kubernetes | What's next? |
+
+**Goal:** Understand the *why* before the *how*
+
+---
+
+# Part 1: The Server Room Era (1990s-2000s)
+
+## A Day in the Life of a Sysadmin
+
+**6:00 AM** - Pager goes off. Server down.
+
+**6:30 AM** - Drive to the data center (yes, physically)
+
+**7:00 AM** - Badge in, find the rack, diagnose hardware failure
+
+**9:00 AM** - Order replacement part. ETA: 3-5 business days.
+
+**9:15 AM** - Set up redirect to backup server (manually)
+
+**12:00 PM** - Meeting: "Why was the site down for 6 hours?"
+
+---
+
+# The Physical Reality
+
+## What companies actually owned
+
+**Your Company's Data Center:**
+
+- Rack 1: $50k
+- Rack 2: $50k
+- Rack 3: $50k
+- UPS Backup: $20k
+- Cooling System: $30k
+- Fire Suppression: $15k
+
+**Staff Required:**
+
+- Sysadmins (24/7 on-call)
+- Network Engineers
+- Security Team
+
+**Total upfront cost:** $200k-500k+ before writing a line of code
+
+---
+
+# The Painful Truth
+
+## Why the old way hurt
+
+| Problem | Reality |
+|---------|---------|
+| **Capacity Planning** | Guess traffic 6 months ahead (usually wrong) |
+| **Black Friday** | Hope you bought enough servers in June |
+| **Server Idle Time** | 90% idle, but you still pay for 100% |
+| **Hardware Failure** | One disk dies = site goes down |
+| **Expansion** | 3-month procurement cycle |
+
+**The conversation:**
+
+> Developer: "We need more capacity"
+>
+> Finance: "Fill out this form. Budget review is Q3."
+>
+> Developer: "But the traffic spike is next week..."
+
+---
+
+# ANTI-PATTERN: Cowboy Deployment
+
+## How people actually deployed code (please don't do this)
+
+```bash
+# The FTP era
+$ ftp production-server.com
+ftp> put index.php
+ftp> quit
+
+# The SSH-and-pray method
+$ ssh admin@production-server.com
+$ cd /var/www/html
+$ vim index.php    # Edit directly in production!
+$ sudo service apache restart
+$ # ...pray it works
+```
+
+**What could go wrong?**
+
+- No version control -> "What was the old code?"
+- No rollback -> "Can we undo this?" "No."
+- "It works on my machine!" -> Different PHP versions
+- No testing -> Customers find your bugs
+
+---
+
+# The Cloud Revolution (2006-2013)
+
+## AWS launches EC2 (2006)
+
+**Before:** "I need a server" -> 3 months, $50k
+
+**After:** "I need a server" -> 5 minutes, $0.10/hour
+
+```mermaid +render
+flowchart LR
+    subgraph Before["Before Cloud"]
+        REQ["Request"] --> APPROVE["CFO Approval<br/>(2 weeks)"]
+        APPROVE --> PROCURE["Procurement<br/>(4 weeks)"]
+        PROCURE --> SHIP["Shipping<br/>(2 weeks)"]
+        SHIP --> RACK["Racking<br/>(1 week)"]
+        RACK --> CONFIG["Configuration<br/>(1 week)"]
+    end
+
+    subgraph After["After Cloud"]
+        API["API Call"] --> RUNNING["Server Running<br/>(5 minutes)"]
+    end
+```
+
+---
+
+# Why Cloud Won
+
+## The economic shift
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Own Hardware (Old Way)**
+
+**Upfront cost:** $50k-500k
+
+**Cost model:** CapEx
+- Buy assets upfront
+- Depreciation over time
+- Sunk cost
+
+**Time to deploy:** Weeks/months
+- Budget approval
+- Procurement
+- Shipping
+- Racking & cabling
+- Configuration
+
+**Scale up:** Buy more hardware
+- 3-month lead time
+- Guess capacity needs
+
+**Scale down:** Sell hardware?
+- Good luck!
+- Stuck with it
+
+**Maintenance:** Your problem
+- 24/7 staff
+- Hardware failures
+- Upgrades
+
+<!-- column: 1 -->
+
+**Cloud (New Way)**
+
+**Upfront cost:** $0
+
+**Cost model:** OpEx
+- Pay as you go
+- $0.10/hour
+- Stop paying when not using
+
+**Time to deploy:** Minutes
+- API call
+- Server running
+- That's it
+
+**Scale up:** Click a button
+- Instant
+- No planning needed
+
+**Scale down:** Stop paying
+- Delete resources
+- Immediate cost savings
+
+**Maintenance:** Their problem
+- Cloud provider handles
+- SLA guarantees
+- Automatic updates
+
+**The killer feature:** Pay only for what you use
+
+> "We used to buy hardware for peak load.
+> Now we rent it for 2 hours on Black Friday."
+
+<!-- reset_layout -->
+
+---
+
+# The Container Era (2013-Present)
+
+## Docker changes everything
+
+**The problem Docker solved:**
+
+```
+Developer: "It works on my machine!"
+Operations: "Well, your machine isn't production."
+Developer: "..."
+Operations: "..."
+Both: *angry silence*
+```
+
+**Docker's answer:** Ship your machine
+
+```bash
+# Before: Here's my code, good luck
+scp app.py server:/app/
+
+# After: Here's my entire environment
+docker push myapp:v1
+```
+
+---
+
+# The Three Eras Summarized
+
+## The evolution of deployment
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**1. Server Room Era (1990s-2000s)**
+
+- Own hardware
+- Manual deploys
+- Months to scale
+
+**2. Cloud Era (2006-2013)**
+
+- Rent hardware
+- Scripted deploys
+- Minutes to scale
+
+**3. Container Era (2013-present)**
+
+- Abstract hardware
+- Automated deploys
+- Seconds to scale
+
+<!-- column: 1 -->
+
+| Era | Deploy Time | Scale Time | "Works on my machine" |
+|-----|-------------|------------|----------------------|
+| **Server Room** | Days/weeks | Months | "Figure it out" |
+| **Cloud** | Hours | Minutes | "Check the config" |
+| **Container** | Seconds | Seconds | Solved! |
+
+<!-- reset_layout -->
+
+---
+
+# Part 2: What is DevOps
+
+## The Old Way: The Wall
+
+```mermaid +render
+flowchart LR
+    subgraph Dev["Development Team"]
+        D1["Write code"]
+        D2["Test locally"]
+        D3["Throw over wall"]
+    end
+
+    WALL["THE<br/>WALL"]
+
+    subgraph Ops["Operations Team"]
+        O1["Receive code"]
+        O2["Try to deploy"]
+        O3["Something breaks"]
+        O4["Blame devs"]
+    end
+
+    D3 --> WALL
+    WALL --> O1
+    O4 -.->|"Your code is broken"| D1
+```
+
+**Result:** Blame games, slow releases, 3am pages
+
+---
+
+# DevOps Philosophy
+
+## Breaking down the wall
+
+**DevOps is NOT:**
+
+- A job title
+- A tool you can buy
+- Just CI/CD
+
+**DevOps IS:**
+
+- A culture of shared responsibility
+- Automation mindset: "If you do it twice, automate it"
+- Fast feedback loops: fail fast, learn fast
+
+**The DevOps mantra:**
+
+> "You build it, you run it." - Werner Vogels, Amazon CTO
+
+---
+
+# The DevOps Lifecycle
+
+```mermaid +render
+flowchart TB
+    PLAN["Plan"] --> CODE["Code"]
+    CODE --> BUILD["Build"]
+    BUILD --> TEST["Test"]
+    TEST --> RELEASE["Release"]
+    RELEASE --> DEPLOY["Deploy"]
+    DEPLOY --> OPERATE["Operate"]
+    OPERATE --> MONITOR["Monitor"]
+    MONITOR --> PLAN
+
+    style PLAN fill:#f9f,stroke:#333
+    style MONITOR fill:#f9f,stroke:#333
+```
+
+**Key insight:** It's a loop, not a line
+
+**Old way:** Plan -> Code -> ... -> Deploy -> Done!
+
+**DevOps way:** Continuous improvement, continuous feedback
+
+---
+
+# The Mindset Shift
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Old Thinking**
+
+- "That's ops' problem"
+- "Deploy quarterly"
+- "Don't touch production"
+- "Document everything"
+- "Change is risky"
+- "Fail = bad"
+- Manual processes
+- Siloed teams
+- Big releases
+
+<!-- column: 1 -->
+
+**DevOps Thinking**
+
+- "We're all responsible"
+- "Deploy daily (or more)"
+- "Production is just another env"
+- "Automate everything"
+- "Small changes = small risk"
+- "Fail fast, learn faster"
+- Automated pipelines
+- Collaborative culture
+- Continuous delivery
+
+<!-- reset_layout -->
+
+**The goal:** Make deployment boring
+
+Boring = reliable, repeatable, automated
+
+---
+
+# Part 3: First Principles - Why Docker
+
+## The "Works on My Machine" Problem
+
+**Your laptop:**
+
+- Python 3.11
+- PostgreSQL 15
+- Ubuntu 22.04
+- That weird library you installed 6 months ago
+
+**Production server:**
+
+- Python 3.9
+- PostgreSQL 13
+- CentOS 7
+- None of your weird libraries
+
+**Result:** Hours debugging environment differences
+
+---
+
+# ANTI-PATTERN: Global Dependencies
+
+## The dependency disaster
+
+```bash
+# Installing dependencies globally (DON'T DO THIS)
+$ sudo pip install flask
+$ sudo pip install requests==2.25.0
+
+# 6 months later, different project...
+$ sudo pip install requests==2.28.0
+# Breaks your first project!
+
+# Even worse: system Python
+$ sudo apt install python-something
+# Overrides system utilities that depend on Python
+```
+
+**The problem:** Everything shares the same environment
+
+**The solution:** Isolation
+
+---
+
+# Linux Primitives: The Building Blocks
+
+## Containers aren't magic--they're Linux features
+
+```mermaid +render
+flowchart TB
+    subgraph Primitives["Linux Building Blocks"]
+        CG["cgroups<br/>(Resource Limits)"]
+        NS["namespaces<br/>(Isolation)"]
+        CH["chroot<br/>(Filesystem)"]
+    end
+
+    subgraph Result["Container"]
+        PROC["A process that thinks<br/>it has its own computer"]
+    end
+
+    CG --> Result
+    NS --> Result
+    CH --> Result
+```
+
+**The insight:** A container is just a process with restrictions
+
+---
+
+# cgroups: The Resource Police
+
+## "You can't use more than this"
+
+**The problem:** One rogue process can:
+
+- Eat 100% of RAM -> everything crashes
+- Peg all CPU cores -> everything freezes
+- Fill the disk -> system unbootable
+
+**The solution:** cgroups (Control Groups)
+
+```bash
+# Limit a process to 512MB RAM and 50% CPU
+# (This is what Docker does under the hood)
+```
+
+| What cgroups do | Example |
+|-----------------|---------|
+| **Limit** resources | Max 512MB RAM |
+| **Track** usage | "Used 2GB this hour" |
+| **Prioritize** | Web server gets more CPU than batch jobs |
+
+---
+
+# namespaces: The Isolation Magic
+
+## "You can't see other processes"
+
+**The problem:** By default, every process can see:
+
+- All other processes (`ps aux`)
+- The whole network (same IP, same ports)
+- The entire filesystem
+
+**The solution:** namespaces
+
+| Namespace | What it isolates |
+|-----------|------------------|
+| **PID** | Process list (container sees PID 1) |
+| **Network** | IP addresses, ports |
+| **Mount** | Filesystem tree |
+| **User** | User/group IDs |
+
+**Try it yourself:**
+
+```bash
+# Create a process that can only see itself
+sudo unshare --pid --fork --mount-proc ps aux
+```
+
+---
+
+# chroot: The Filesystem Trick
+
+## "Your root is not my root"
+
+**The problem:** How do you give a process a different filesystem without a VM?
+
+**The solution:** `chroot` (change root)
+
+```bash
+# Make /my-container the new "/" for this process
+sudo chroot /my-container /bin/bash
+
+# Now "/" points to /my-container
+# Can't see the real filesystem!
+```
+
+**Fun fact:** This has existed since 1979!
+
+**Used for:**
+
+- Building Linux distributions from scratch
+- Rescuing broken systems from a live USB
+- Creating containers (combined with cgroups + namespaces)
+
+---
+
+# DEMO: chroot in Action
+
+## Live demonstration
+
+1. Create a minimal filesystem
+1. chroot into it
+1. Show isolated filesystem view
+1. Exit and compare
+
+---
+
+# How Primitives Become Containers
+
+```mermaid +render
+flowchart TB
+    subgraph Linux["Linux Kernel"]
+        CG["cgroups<br/>Limit: 512MB RAM<br/>Limit: 50% CPU"]
+        NS["namespaces<br/>Own PID 1<br/>Own network<br/>Own filesystem view"]
+        CH["chroot<br/>Root = /var/lib/docker/..."]
+    end
+
+    subgraph Container["What you see"]
+        PROC["nginx:alpine<br/>Thinks it owns the machine<br/>Actually just a process"]
+    end
+
+    CG --> Container
+    NS --> Container
+    CH --> Container
+```
+
+**The magic:** Docker packages this complexity into a simple CLI
+
+---
+
+# Why Docker Won
+
+## It's all about developer experience
+
+**Before Docker:** To use cgroups/namespaces, you needed to:
+
+- Write C code
+- Understand kernel interfaces
+- Be a Linux expert
+
+**After Docker:**
+
+```bash
+docker run nginx
+```
+
+That's it. One command.
+
+---
+
+# What Docker Provides
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**1. Dockerfile**
+
+Recipe for building images
+
+```dockerfile
+FROM node:18
+WORKDIR /app
+COPY . .
+RUN npm install
+CMD ["npm", "start"]
+```
+
+**Why it matters:** Reproducible environments
+
+**2. Image Layers**
+
+Cacheable, reusable pieces
+
+- Each instruction = one layer
+- Layers shared between images
+- Only rebuild changed layers
+
+**Why it matters:** Fast builds
+
+<!-- column: 1 -->
+
+**3. Docker Hub**
+
+Central image registry
+
+```bash
+docker pull nginx
+docker pull postgres
+docker push mycompany/myapp
+```
+
+**Why it matters:** Share with the world, reuse others' work
+
+**4. Simple CLI**
+
+Anyone can use it
+
+```bash
+docker run nginx        # Start container
+docker build -t app .   # Build image
+docker push app         # Share image
+```
+
+**Why it matters:** Low barrier to entry
+
+<!-- reset_layout -->
+
+**The insight:** Docker didn't invent containers--it made them usable
+
+---
+
+# Container Runtimes & OCI
+
+## What actually runs your containers?
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**What is a Container Runtime?**
+
+The software that actually runs containers:
+- Starts/stops containers
+- Manages resources (cgroups)
+- Provides isolation (namespaces)
+- Handles container lifecycle
+
+**Popular Runtimes:**
+
+**Docker Engine**
+- Most popular, full platform
+- Use: Development, most production
+
+**containerd**
+- Docker's underlying engine
+- Use: Kubernetes, lightweight
+
+**CRI-O**
+- Built for Kubernetes
+- Use: K8s-focused deployments
+
+**Podman**
+- Daemonless, Docker-compatible
+- Use: Rootless containers, security
+
+<!-- column: 1 -->
+
+**OCI (Open Container Initiative)**
+
+Industry standard for containers
+
+**What it defines:**
+- Container image format
+- Runtime specification
+- Distribution specification
+
+**Why it matters:**
+
+✓ **Compatibility**
+- Docker image runs on Podman
+- Write once, run anywhere
+
+✓ **No vendor lock-in**
+- Switch runtimes easily
+- Not tied to Docker
+
+✓ **Innovation**
+- Any company can build tools
+- Interoperable ecosystem
+
+**Example:**
+```bash
+# Build with Docker
+docker build -t myapp .
+
+# Run with Podman (OCI-compliant)
+podman run myapp  # Works!
+```
+
+**Fun fact:** Docker donated containerd to OCI, now used by many tools!
+
+<!-- reset_layout -->
+
+---
+
+# Containers vs VMs
+
+```mermaid +render
+flowchart TB
+    subgraph VM["Virtual Machine"]
+        APP1["App"]
+        OS1["Guest OS<br/>(Ubuntu)"]
+        HV["Hypervisor"]
+        OS0["Host OS"]
+        HW1["Hardware"]
+
+        APP1 --> OS1 --> HV --> OS0 --> HW1
+    end
+
+    subgraph Container["Container"]
+        APP2["App"]
+        RT["Container Runtime"]
+        OS2["Host OS"]
+        HW2["Hardware"]
+
+        APP2 --> RT --> OS2 --> HW2
+    end
+```
+
+| Aspect | VM | Container |
+|--------|-----|-----------|
+| **Startup** | 30s - 5min | < 1 second |
+| **Size** | 1-50 GB | 10-500 MB |
+| **Isolation** | Complete (own kernel) | Shared kernel |
+| **Use case** | Different OS needed | Same OS, different apps |
+
+---
+
+# Hypervisors & VM Tools
+
+## Understanding virtualization layers
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Type 1 Hypervisors (Bare Metal)**
+
+Run directly on hardware (no host OS)
+
+**Examples:**
+- VMware ESXi
+- KVM (Linux)
+- Xen
+- Microsoft Hyper-V
+
+**Characteristics:**
+- Better performance
+- Production-ready
+- Hardware-level control
+
+**Use case:**
+- Data centers
+- Production servers
+- Cloud infrastructure
+
+<!-- column: 1 -->
+
+**Type 2 Hypervisors (Hosted)**
+
+Run on top of host OS
+
+**Examples:**
+- VirtualBox
+- VMware Workstation
+- QEMU
+- Parallels (Mac)
+
+**Characteristics:**
+- Easier to set up
+- Better for development
+- Runs alongside host apps
+
+**Use case:**
+- Development
+- Testing
+- Learning
+
+**VM Management Tools:**
+- **libvirt** - KVM/QEMU management (CLI/API)
+- **multipass** - Quick Ubuntu VMs
+- **Vagrant** - Reproducible VM environments (VMs as code)
+
+<!-- reset_layout -->
+
+**When to use VMs vs Containers:**
+- **VMs:** Different OS, complete isolation, legacy apps
+- **Containers:** Same OS, faster startup, modern cloud-native apps
+
+---
+
+# Dockerfile Syntax: Complete Reference
+
+## All instructions you need
+
+```dockerfile
+# FROM: Base image (required, must be first)
+FROM python:3.11-slim
+
+# ARG: Build-time variables (can use in FROM)
+ARG APP_VERSION=1.0
+
+# LABEL: Metadata
+LABEL maintainer="you@example.com" version="${APP_VERSION}"
+
+# WORKDIR: Set working directory (creates if doesn't exist)
+WORKDIR /app
+
+# COPY: Copy files from host to container
+COPY requirements.txt .
+
+# RUN: Execute commands during build (creates layer)
+RUN pip install -r requirements.txt
+
+# COPY: Add application code
+COPY . .
+
+# ENV: Environment variables (available at runtime)
+ENV PYTHONUNBUFFERED=1 PORT=8080
+
+# USER: Switch to non-root user (security!)
+RUN useradd -m appuser
+USER appuser
+
+# EXPOSE: Document port (metadata only, doesn't publish)
+EXPOSE 8080
+
+# VOLUME: Mount point for persistent data
+VOLUME /data
+
+# HEALTHCHECK: Container health check
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD curl -f http://localhost:8080/health || exit 1
+
+# ENTRYPOINT: Main executable (harder to override)
+# CMD: Default arguments (easy to override)
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+```
+
+**Most-used instructions:** FROM, WORKDIR, COPY, RUN, ENV, EXPOSE, CMD
+
+---
+
+# CMD vs ENTRYPOINT vs RUN
+
+## The confusion explained
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+| Instruction | When? | Override? |
+|-------------|-------|-----------|
+| **RUN** | Build time | No |
+| **CMD** | Container start | Yes (easy) |
+| **ENTRYPOINT** | Container start | Yes (harder) |
+
+**Use cases:**
+
+- **RUN:** Install packages, setup during build
+- **CMD:** Default command (easy to change)
+- **ENTRYPOINT:** Force executable (args only)
+
+<!-- column: 1 -->
+
+**Examples:**
+
+```dockerfile
+# 1. CMD only (fully overridable)
+CMD ["python", "app.py"]
+```
+```bash
+docker run myimage python other.py  # Works!
+```
+
+```dockerfile
+# 2. ENTRYPOINT + CMD (args overridable)
+ENTRYPOINT ["python"]
+CMD ["app.py"]
+```
+```bash
+docker run myimage other.py  # Runs: python other.py
+```
+
+```dockerfile
+# 3. RUN (build time only)
+RUN apt-get update && apt-get install -y curl
+```
+No override - happens once during `docker build`
+
+<!-- reset_layout -->
+
+---
+
+# Dockerfile Layer Caching
+
+## Why order matters
+
+```dockerfile
+# BAD: Changes to code invalidate all layers
+FROM python:3.11-slim
+COPY . .                          # Changes often!
+RUN pip install -r requirements.txt  # Reinstalls every time
+
+# GOOD: Dependencies cached separately
+FROM python:3.11-slim
+COPY requirements.txt .           # Changes rarely
+RUN pip install -r requirements.txt  # Cached unless requirements change
+COPY . .                          # Changes often, but doesn't affect above
+```
+
+**Each instruction = new layer**
+
+**Layers are cached and reused**
+
+**Change a layer = rebuild that layer + all after it**
+
+**Pro tip:** Order from least-changed to most-changed
+
+---
+
+# DEMO: Docker Build and Run
+
+## Hands-on demonstration
+
+1. Look at a Dockerfile
+1. Build an image
+1. Run a container
+1. See the isolation
+
+---
+
+# Docker Images & Containers
+
+## Understanding the blueprint and instances
+
+**What is an image?**
+
+- Blueprint/template for containers (like a class in OOP)
+- Read-only filesystem with everything needed to run
+- Contains: Base OS + your code + dependencies + config
+
+**Images are built in layers:**
+
+```bash
+# Each Dockerfile instruction = one layer
+FROM python:3.11        # Layer 1: Base OS + Python
+COPY requirements.txt . # Layer 2: Add requirements file
+RUN pip install ...     # Layer 3: Install dependencies
+COPY . .                # Layer 4: Add application code
+```
+
+**Key insight:** Layers are cached and shared between images
+
+**Image vs Container - The Relationship:**
+
+| Image | Container |
+|-------|-----------|
+| Blueprint | Running instance |
+| Read-only | Has writable layer |
+| Built once | Can run many times |
+| Stored on disk | Running in memory |
+| `docker build` | `docker run` |
+
+**Multiple containers from one image:**
+
+```bash
+docker build -t myapp:v1 .                # Build once
+
+docker run --name app1 myapp:v1           # Instance 1
+docker run --name app2 myapp:v1           # Instance 2
+docker run --name app3 myapp:v1           # Instance 3
+# All three share the same base image layers!
+```
+
+**Analogy:** One .exe file → multiple running processes
+
+---
+
+# Docker Volumes: Persistent Data
+
+## The problem with containers
+
+**Containers are ephemeral (temporary):**
+
+```bash
+docker run postgres  # Starts database
+# Write some data
+docker stop postgres # Stop container
+docker rm postgres   # Delete container
+# Your data is GONE!
+```
+
+**The solution: Volumes**
+
+**Volume** = Persistent storage that survives container deletion
+
+**Three types of mounts:**
+
+1. **Named volumes** (Docker managed)
+2. **Bind mounts** (Host filesystem)
+3. **tmpfs** (Memory only)
+
+---
+
+# Volumes vs Bind Mounts
+
+## When to use each
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Named Volumes**
+*(Recommended for production)*
+
+```bash
+# Docker manages storage location
+docker run -v db-data:/var/lib/postgresql/data postgres
+
+# Persists after deletion
+docker rm postgres  # Container gone
+docker volume ls    # Volume exists!
+```
+
+**Storage location:**
+`/var/lib/docker/volumes/db-data`
+
+**Use cases:**
+- Databases
+- Uploaded files
+- Production data
+- Anything that needs persistence
+
+**Pros:**
+- Docker manages location
+- Works across OS
+- Can backup easily
+
+<!-- column: 1 -->
+
+**Bind Mounts**
+*(Good for development)*
+
+```bash
+# Mount specific host directory
+docker run -v /home/user/mycode:/app myapp
+
+# Live sync both ways
+# Host changes → Container sees
+# Container changes → Host sees
+```
+
+**Storage location:**
+Exactly where you specify
+
+**Use cases:**
+- Development (live code reload)
+- Config files
+- Source code mounting
+- Build artifacts
+
+**Pros:**
+- Full control of location
+- Edit with host tools
+- Instant changes
+
+<!-- reset_layout -->
+
+---
+
+# Volume Commands
+
+## Managing persistent data
+
+```bash
+# List volumes
+docker volume ls
+
+# Create a volume
+docker volume create my-data
+
+# Inspect volume (see where it's stored)
+docker volume inspect my-data
+
+# Remove unused volumes
+docker volume prune
+
+# Remove specific volume (must stop containers first!)
+docker volume rm my-data
+
+# Using volumes in docker run
+docker run -v volume-name:/container/path image
+docker run -v /host/path:/container/path image  # Bind mount
+```
+
+**Pro tip:** Always use volumes for databases!
+
+---
+
+# Docker Networking Fundamentals
+
+## How containers talk to each other
+
+**By default:** Each container is isolated
+
+**Problem:** How does your web app connect to your database?
+
+**Solution:** Docker networks
+
+**Types of networks:**
+
+1. **bridge** (default) - Containers on same host
+2. **host** - Use host's network directly (no isolation)
+3. **none** - No network access
+
+---
+
+# Bridge Networks Explained
+
+## The most common type
+
+**Default behavior:**
+
+```bash
+# These containers CAN'T talk to each other (different networks)
+docker run --name web1 nginx
+docker run --name web2 nginx
+```
+
+**Custom network:**
+
+```bash
+# Create a network
+docker network create myapp-network
+
+# Containers on same network CAN talk
+docker run --name db --network myapp-network postgres
+docker run --name web --network myapp-network myapp
+
+# Inside web container, you can:
+# ping db          # Works!
+# curl http://db:5432  # DNS works!
+```
+
+**Key insight:** Container names become DNS hostnames on custom networks
+
+---
+
+# Network Commands
+
+## Managing Docker networks
+
+```bash
+# List networks
+docker network ls
+
+# Create network
+docker network create my-network
+
+# Inspect network (see connected containers)
+docker network inspect my-network
+
+# Connect running container to network
+docker network connect my-network my-container
+
+# Disconnect
+docker network disconnect my-network my-container
+
+# Remove network (must disconnect containers first)
+docker network rm my-network
+
+# Remove unused networks
+docker network prune
+```
+
+---
+
+# Port Mapping: Host to Container
+
+## Making containers accessible
+
+**The problem:** Container ports are isolated
+
+```bash
+# Web server running on port 80 INSIDE container
+docker run nginx  # Can't access from host!
+```
+
+**The solution: Port mapping**
+
+```bash
+# Map host port 8080 to container port 80
+docker run -p 8080:80 nginx
+
+# Now accessible at localhost:8080
+# Traffic flow: localhost:8080 -> container:80
+```
+
+**Syntax:** `-p HOST:CONTAINER`
+
+```bash
+# Multiple ports
+docker run -p 8080:80 -p 8443:443 nginx
+
+# Bind to specific host IP
+docker run -p 127.0.0.1:8080:80 nginx
+
+# Random host port
+docker run -p 80 nginx  # Docker picks random host port
+```
+
+---
+
+# Putting It All Together
+
+## Images + Volumes + Networks + Ports
+
+```bash
+# Real-world example: WordPress with MySQL
+
+# 1. Create network
+docker network create wordpress-net
+
+# 2. Start database with volume
+docker run -d \
+  --name mysql \
+  --network wordpress-net \
+  -v mysql-data:/var/lib/mysql \
+  -e MYSQL_ROOT_PASSWORD=secret \
+  -e MYSQL_DATABASE=wordpress \
+  mysql:8
+
+# 3. Start WordPress
+docker run -d \
+  --name wordpress \
+  --network wordpress-net \
+  -v wordpress-data:/var/www/html \
+  -p 8080:80 \
+  -e WORDPRESS_DB_HOST=mysql \
+  -e WORDPRESS_DB_NAME=wordpress \
+  -e WORDPRESS_DB_PASSWORD=secret \
+  wordpress:latest
+```
+
+**What's happening:**
+
+- Network: Containers can talk via DNS (wordpress → mysql)
+- Volumes: Data persists across restarts
+- Port: Host :8080 maps to container :80
+- Images: Pre-built from Docker Hub
+
+---
+
+# Why Docker Compose?
+
+## The Problem vs The Solution
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**The Problem: Raw Docker CLI**
+
+```bash
+# 10+ commands to start your app
+docker network create myapp-network
+
+docker run -d --name db \
+  --network myapp-network \
+  -e POSTGRES_PASSWORD=secret \
+  -v db-data:/var/lib/postgresql/data \
+  postgres:15
+
+docker run -d --name cache \
+  --network myapp-network \
+  redis:7-alpine
+
+docker build -t myapp:latest .
+
+docker run -d --name web \
+  --network myapp-network \
+  -p 8080:8080 \
+  -e DATABASE_URL=postgres://db:5432/mydb \
+  -e REDIS_URL=redis://cache:6379 \
+  --restart unless-stopped \
+  myapp:latest
+```
+
+**Pain points:**
+- Hard to remember all flags
+- Manual start order
+- Difficult to share with team
+- Error-prone
+
+<!-- column: 1 -->
+
+**The Solution: Docker Compose**
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  web:
+    build: .
+    ports: ["8080:8080"]
+    environment:
+      DATABASE_URL: postgres://db:5432/mydb
+      REDIS_URL: redis://cache:6379
+    depends_on: [db, cache]
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - db-data:/var/lib/postgresql/data
+  cache:
+    image: redis:7-alpine
+volumes:
+  db-data:
+```
+
+```bash
+docker compose up  # That's it!
+```
+
+**Compose handles automatically:**
+- Network creation
+- Correct start order
+- Volume management
+- One command for everything
+
+<!-- reset_layout -->
+
+---
+
+# Docker Compose Syntax & Patterns
+
+## Essential syntax with common use cases
+
+```yaml
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: .                    # Build from Dockerfile
+    # build:                    # Or specify context
+    #   context: ./app
+    #   dockerfile: Dockerfile.prod
+    # image: nginx:latest       # Or use pre-built image
+
+    ports:
+      - "8080:80"               # HOST:CONTAINER
+
+    environment:                # Environment variables
+      DATABASE_URL: postgres://db:5432/mydb
+      DEBUG: "true"
+    # env_file: .env            # Or load from file
+
+    volumes:
+      - ./src:/app/src          # Bind mount (dev: live reload)
+      - static-data:/app/static # Named volume (persistent)
+
+    depends_on: [db, redis]     # Start order
+    restart: unless-stopped     # Restart policy
+    command: python app.py      # Override default command
+
+    # Health check (common pattern)
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+    # Resource limits (common pattern)
+    deploy:
+      resources:
+        limits: {cpus: '0.5', memory: 512M}
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_PASSWORD: secret
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  redis:
+    image: redis:7-alpine
+
+# Define named volumes
+volumes:
+  postgres-data:
+  static-data:
+
+# Define custom networks (optional, auto-created by default)
+networks:
+  default:
+```
+
+**Most-used options:** build/image, ports, environment, volumes, depends_on
+
+---
+
+# Docker Compose Commands
+
+## The simplicity is the point
+
+```bash
+# Start everything
+docker compose up
+
+# Start in background (detached)
+docker compose up -d
+
+# Start and rebuild images
+docker compose up --build
+
+# Start specific services only
+docker compose up web db
+
+# View logs (all services)
+docker compose logs -f
+
+# View logs (specific service)
+docker compose logs -f web
+
+# List running containers
+docker compose ps
+
+# Execute command in running container
+docker compose exec web bash
+
+# Run one-off command
+docker compose run web python manage.py migrate
+
+# Stop everything (containers remain)
+docker compose stop
+
+# Stop and remove containers (volumes persist)
+docker compose down
+
+# Remove everything including volumes
+docker compose down -v
+
+# Remove everything including images
+docker compose down --rmi all
+
+# Restart specific service
+docker compose restart web
+
+# Scale services (multiple instances)
+docker compose up -d --scale web=3
+```
+
+---
+
+# When to Use Docker Compose
+
+## Perfect for local development
+
+| Use Case | Docker Compose? |
+|----------|----------------|
+| **Local dev environment** | YES - Perfect fit |
+| **Running tests locally** | YES - Spin up test DB easily |
+| **Small personal projects** | YES - Simple deployment |
+| **Team dev consistency** | YES - "Works on my machine" solved |
+| **Production at scale** | NO - Use orchestration (K8s, etc.) |
+| **Single-container apps** | NO - Just use `docker run` |
+
+**The sweet spot:** 2-5 containers on a single machine
+
+---
+
+# When NOT to Use Docker Compose
+
+## Know the limits
+
+**Don't use Compose for:**
+
+- **Production clusters** - No built-in load balancing, auto-scaling, or failover
+- **Multi-host deployments** - Compose is single-host only
+- **High availability** - If a container dies, it doesn't auto-restart by default
+- **Complex orchestration** - Use Kubernetes or Docker Swarm instead
+
+**Simple rule:**
+- Development/testing/small projects → Docker Compose
+- Production at scale → Container orchestration platform
+
+---
+
+# docker-compose vs docker compose
+
+## The evolution
+
+**Old way (standalone tool):**
+```bash
+# Install separately
+pip install docker-compose
+
+# Run with hyphen
+docker-compose up
+```
+
+**New way (Docker plugin):**
+```bash
+# Built into Docker CLI
+# Already installed with Docker
+
+# Run without hyphen
+docker compose up
+```
+
+**What changed?** Docker Compose v2 was rewritten in Go and integrated into Docker CLI
+
+**Which to use?** Use `docker compose` (no hyphen) - it's faster and actively maintained
+
+---
+
+# Part 4: Git Branching & CI/CD
+
+## Why Branching Matters
+
+**Without branches:**
+
+```bash
+# Developer A
+git commit -m "Add login feature"
+git push  # Pushes broken code
+
+# Developer B (same time)
+git commit -m "Fix homepage"
+git push  # Conflict! Merge mess!
+
+# Production: broken
+```
+
+**With branches:**
+
+```bash
+# Developer A
+git checkout -b feature/login
+# Work safely in isolation
+
+# Developer B
+git checkout -b fix/homepage
+# Work safely in isolation
+
+# Merge when ready, reviewed, tested
+```
+
+---
+
+# GitHub Flow (Keep It Simple)
+
+```mermaid +render
+gitGraph
+    commit id: "main"
+    branch feature
+    commit id: "work"
+    commit id: "more work"
+    checkout main
+    merge feature id: "PR merged"
+    commit id: "deployed"
+```
+
+**The rules:**
+
+1. `main` is always deployable
+1. Branch for every change (no matter how small)
+1. Open a Pull Request for review
+1. Merge triggers deploy
+
+**Why this works:** Small changes = small risk
+
+---
+
+# How Branches Enable CI/CD
+
+## Different branches, different actions
+
+**The insight:** Branch-based automation
+
+**Push to feature branch:**
+
+- Run tests
+- Run linters
+- Build (to verify it works)
+- Block merge if fails
+
+**Merge to main:**
+
+- Run all tests
+- Build production artifacts
+- Deploy to staging (optional)
+- Deploy to production
+- Tag release
+
+**The flow:**
+
+```
+feature/new-login → [Tests only]
+         ↓
+    (Pull Request)
+         ↓
+      main → [Tests + Build + Deploy] → Production
+```
+
+---
+
+# Part 5: CI/CD
+
+## What is CI? (Continuous Integration)
+
+**The problem:** "Integration hell"
+
+- Work on a feature for 2 weeks
+- Try to merge
+- 500 conflicts
+- 2 more weeks fixing conflicts
+
+**The solution:** Merge early, merge often, test automatically
+
+**The CI pipeline:**
+
+1. `git push` → Triggers automation
+2. Build → Compile/bundle the code
+3. Test → Run all tests
+4. Lint → Check code style
+5. **Pass** → Ready to merge
+6. **Fail** → Fix required (can't merge)
+
+---
+
+# ANTI-PATTERN: Long-Lived Branches
+
+## The merge disaster
+
+```mermaid +render
+gitGraph
+    commit id: "Jan"
+    branch feature
+    commit id: "Feb work"
+    checkout main
+    commit id: "Feb fixes"
+    checkout feature
+    commit id: "Mar work"
+    checkout main
+    commit id: "Mar changes"
+    commit id: "Apr changes"
+    checkout feature
+    commit id: "Apr work"
+    checkout main
+    merge feature id: "May: NIGHTMARE"
+```
+
+**3-month-old branch:** 200 files changed, 50 conflicts
+
+**vs. daily merges:** 5 files changed, 0-2 conflicts
+
+---
+
+# What is CD? (Continuous Deployment)
+
+**The old way:**
+
+1. Finish feature
+1. Schedule deploy meeting
+1. Write deploy checklist (20 steps)
+1. Execute checklist manually at 2am Sunday
+1. Something breaks
+1. Rollback manually
+1. Postmortem Monday
+
+**The CD way:**
+
+1. Merge to main
+1. Tests pass automatically
+1. Deploy happens automatically
+1. Done
+
+---
+
+# GitHub Actions: Free CI/CD
+
+## Why GitHub Actions won
+
+- **Free** for public repos (2,000 min/month for private)
+- **Integrated** with GitHub (status checks, PR comments)
+- **Huge marketplace** of pre-built actions
+- **Matrix builds** (test on multiple OS/versions)
+- **Self-hosted runners** (use your own machines)
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: pip install -r requirements.txt
+      - run: pytest
+```
+
+---
+
+# GitHub Actions: Complete Workflow Syntax
+
+## Full example with all key concepts
+
+```yaml
+# .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+# Triggers - when to run
+on:
+  push:
+    branches: [main, develop]
+    paths: ['src/**']           # Only if these files change
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * 0'         # Weekly on Sunday
+  workflow_dispatch:            # Manual trigger (button in UI)
+
+# Global environment variables
+env:
+  NODE_ENV: production
+
+# Jobs (run in parallel by default)
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest      # or: windows-latest, macos-latest
+
+    # Matrix: test multiple versions
+    strategy:
+      matrix:
+        python-version: ['3.9', '3.10', '3.11']
+        os: [ubuntu-latest, macos-latest]
+      fail-fast: false          # Continue even if one fails
+    # Creates 6 jobs: 3 versions × 2 OS = 6
+
+    # Services: databases, cache, etc.
+    services:
+      postgres:
+        image: postgres:15
+        env: {POSTGRES_PASSWORD: postgres}
+        ports: [5432:5432]
+
+    steps:
+      - uses: actions/checkout@v4  # Checkout code (almost always first)
+
+      - uses: actions/setup-python@v5  # Use pre-built action
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: 'pip'
+
+      - run: |                       # Run shell commands
+          pip install -r requirements.txt
+          pytest --cov
+
+      - name: Upload coverage        # Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: coverage-report
+          path: htmlcov/
+
+  build:
+    runs-on: ubuntu-latest
+    needs: test                      # Job dependency (waits for test)
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t myapp:latest .
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [test, build]             # Wait for both jobs
+    if: github.ref == 'refs/heads/main'  # Conditional: only on main
+    environment:
+      name: production
+      url: https://myapp.com
+    steps:
+      - run: echo "Deploying..."
+```
+
+**Key concepts:** Triggers, jobs (parallel/sequential), matrix builds, services, secrets
+
+---
+
+# GitHub Actions: Secrets & Variables
+
+## Managing sensitive data
+
+**Secrets (encrypted, never logged):**
+
+```yaml
+steps:
+  - name: Deploy
+    env:
+      API_KEY: ${{ secrets.API_KEY }}
+      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+    run: ./deploy.sh
+```
+
+**Add secrets in:** Settings → Secrets and variables → Actions
+
+**Variables (not encrypted, visible in logs):**
+
+```yaml
+env:
+  API_URL: ${{ vars.API_URL }}
+  ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+```
+
+**Built-in context variables:**
+
+```yaml
+- name: Print info
+  run: |
+    echo "Branch: ${{ github.ref_name }}"
+    echo "Actor: ${{ github.actor }}"
+    echo "Repo: ${{ github.repository }}"
+    echo "SHA: ${{ github.sha }}"
+```
+
+---
+
+# GitHub Actions: Common Patterns
+
+## Real-world examples
+
+**Test → Build → Deploy:**
+
+```yaml
+name: Production Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t app .
+      - run: docker push app:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - run: kubectl set image deployment/app app=app:${{ github.sha }}
+```
+
+**Pull Request checks:**
+
+```yaml
+name: PR Checks
+
+on:
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run lint
+
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm run type-check
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm test
+```
+
+---
+
+# Testing Actions Locally: act
+
+## Don't wait for push to find out it's broken
+
+**The problem:** Pushed 5 times to fix YAML syntax
+
+**The solution:** `act` - run Actions locally
+
+```bash
+# Install act
+brew install act
+
+# Run your workflows locally
+act push              # Simulate a push event
+act pull_request      # Simulate a PR event
+act -j test           # Run just the "test" job
+
+# See what would run without running
+act -n
+```
+
+**Why this is great:**
+
+- Fast feedback (no waiting for GitHub)
+- Saves your commit history from "fix ci" spam
+- Works offline
+
+---
+
+# DEMO: GitHub Actions
+
+## Real examples from my projects
+
+- funkybooboo.github.io
+- nsegcm
+- lazycsv
+- coreutils
+
+---
+
+# Deployment Strategies
+
+## How to update production safely
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**1. Rolling Update**
+
+- Replace instances one at a time
+- v1 → v2 → v2 → v2
+- Always some instances running
+
+**How it works:**
+1. Deploy v2 to one instance
+2. Health check passes
+3. Move to next instance
+4. Repeat until all updated
+
+**Pros:**
+- ✓ No downtime
+- ✓ Simple to implement
+
+**Cons:**
+- ✗ Slow rollback (undo each)
+- ✗ Both versions running simultaneously
+
+**Use case:** Standard deployments
+
+<!-- column: 1 -->
+
+**2. Blue-Green Deployment**
+
+- Blue (v1): Currently live
+- Green (v2): New version ready
+- Flip switch → all traffic to Green
+
+**How it works:**
+1. Deploy v2 to Green (inactive)
+2. Test Green thoroughly
+3. Switch traffic: Blue → Green
+4. Keep Blue as backup
+
+**Pros:**
+- ✓ Instant rollback (flip back)
+- ✓ No mixed versions
+- ✓ Easy to test
+
+**Cons:**
+- ✗ Double resources needed
+
+**Use case:** Critical apps, instant rollback needed
+
+<!-- reset_layout -->
+
+**3. Canary Deployment:** v2 gets 10% traffic → Watch metrics → Gradually increase → 100%
+- **Risk:** Lowest (catches issues early with small user %)
+- **Use case:** Risk-averse, large user bases
+
+---
+
+# Part 6: The Cloud
+
+## What is "The Cloud"
+
+**Not helpful:** "It's just someone else's computer"
+
+**Actually helpful:** Abstraction over infrastructure
+
+**The layers:**
+
+**What You See:**
+
+- APIs & Dashboards
+- Simple commands (`create vm`, `upload file`)
+
+**What Cloud Provides (Abstraction):**
+
+- **Compute** - Run your code anywhere
+- **Storage** - Save data reliably
+- **Network** - Connect everything together
+
+**What Actually Exists (Reality):**
+
+- Data centers globally distributed
+- Thousands of physical servers
+- Networking equipment
+- Power, cooling, security
+- Teams managing hardware
+
+**The value:** You never touch the hardware, just use the API
+
+---
+
+# Why Cloud Won (For Most Use Cases)
+
+| Old Way | Cloud Way |
+|---------|-----------|
+| Buy servers ($50k) | Pay $0.10/hour |
+| Wait 3 months | Ready in 5 minutes |
+| Guess capacity | Scale automatically |
+| Hire sysadmins | Managed services |
+| One data center | 30+ global regions |
+| You fix outages | SLA guarantees |
+
+**The killer insight:** Convert capital expense to operating expense
+
+No more begging finance for server budget
+
+---
+
+# ANTI-PATTERN: Over-Engineering for Scale
+
+## You don't need Kubernetes (yet)
+
+**Startup with 100 users:**
+
+> "We need microservices with service mesh,
+> Kubernetes, and multi-region failover!"
+
+**Reality:** A $5/month VPS would work fine
+
+**When you actually need scale:**
+
+- Millions of users
+- Sub-second latency requirements globally
+- Strict uptime SLAs
+- Team of 50+ engineers
+
+Start simple. Add complexity when you need it.
+
+---
+
+# Scaling: Vertical vs Horizontal
+
+## Two ways to handle more load
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Vertical Scaling (Scale Up)**
+
+Add more resources to ONE server
+
+**Example:**
+- t2.micro → t2.large → t2.xlarge
+- 2GB RAM → 8GB RAM → 32GB RAM
+
+**Pros:**
+- ✓ Simple setup
+- ✓ No code changes
+- ✓ No distributed system complexity
+
+**Cons:**
+- ✗ Hardware limits (biggest machine)
+- ✗ Single point of failure
+- ✗ Expensive at scale
+- ✗ Downtime to upgrade
+
+**When to use:**
+- Starting out
+- Databases (simpler)
+- Legacy applications
+
+<!-- column: 1 -->
+
+**Horizontal Scaling (Scale Out)**
+
+Add MORE servers
+
+**Example:**
+- 1 server → 3 servers → 10 servers
+- Distribute load across fleet
+
+**Pros:**
+- ✓ Almost unlimited scaling
+- ✓ Redundancy (if one fails, others continue)
+- ✓ Cheaper (commodity hardware)
+- ✓ No downtime (add/remove servers)
+
+**Cons:**
+- ✗ Requires stateless architecture
+- ✗ More complex (load balancers, orchestration)
+- ✗ Eventual consistency challenges
+
+**When to use:**
+- Production web apps
+- High traffic services
+- Cloud-native apps
+- Modern microservices
+
+**Cloud makes this easy:** Click to add servers, pay per use
+
+<!-- reset_layout -->
+
+---
+
+# Basic Cloud Services
+
+## The core categories
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Compute (Run Code)**
+
+**VMs (Virtual Machines)**
+- Full control, run anything
+- Examples: EC2, Compute Engine, Azure VMs
+- When: Legacy apps, full OS control
+
+**Containers (Managed)**
+- Run Docker containers
+- Examples: Cloud Run, ECS, Fargate
+- When: Microservices, scaling
+
+**Functions (Serverless)**
+- Just upload code
+- Examples: Lambda, Cloud Functions
+- When: Event-driven, sporadic loads
+
+**Network**
+
+- **Load Balancers** - Distribute traffic
+- **CDN** - Cache globally (fast!)
+- **DNS** - Route traffic
+
+<!-- column: 1 -->
+
+**Storage (Save Data)**
+
+**Object Storage**
+- Files, images, videos, backups
+- Examples: S3, Cloud Storage, Azure Blob
+- Cheap, unlimited scale
+- Pay per GB stored
+
+**Databases - Managed**
+
+*Relational (SQL):*
+- PostgreSQL, MySQL, SQL Server
+- ACID guarantees
+- Complex queries
+
+*NoSQL:*
+- MongoDB (documents)
+- DynamoDB (key-value)
+- Firestore (real-time)
+- Flexible schema
+- Horizontal scaling
+
+**Why managed?** Cloud provider handles:
+- Backups
+- Updates
+- Scaling
+- High availability
+
+<!-- reset_layout -->
+
+---
+
+# DEMO: Cloud Console Tour
+
+## Quick look at Google Cloud
+
+- Compute Engine (VMs)
+- Cloud Run (Containers)
+- Cloud Storage (Files)
+
+---
+
+# Infrastructure as Code (IaC)
+
+## Treating infrastructure like software
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**The Problem: Clicking in cloud consoles**
+
+1. Log in, click "Create VM"
+2. Fill out forms
+3. Repeat 10 times
+4. Six months later: "What settings did we use?"
+
+**Issues:**
+- ✗ No history
+- ✗ Not reproducible
+- ✗ Error-prone
+- ✗ No code review
+- ✗ Can't version control
+- ✗ Disaster recovery?
+
+**Popular Tools:**
+
+- **Terraform** - Cloud-agnostic (most popular)
+- **CloudFormation** - AWS-only
+- **Pulumi** - Real programming languages
+- **Ansible** - Configuration management + IaC
+
+<!-- column: 1 -->
+
+**The Solution: Infrastructure as Code**
+
+Write config files → git → review → apply
+
+**How it works:**
+```hcl
+# infrastructure.tf
+resource "aws_instance" "web" {
+  ami           = "ami-12345"
+  instance_type = "t2.micro"
+}
+```
+
+**Benefits:**
+
+| Without IaC | With IaC |
+|-------------|----------|
+| Manual clicks | Code |
+| No history | `git diff` |
+| Can't recreate | `terraform apply` |
+| No review | Pull requests |
+| Disaster? | Rebuild from code |
+
+**The mindset shift:**
+Infrastructure becomes disposable when it's code
+
+<!-- reset_layout -->
+
+---
+
+# Terraform Basics
+
+## Quick introduction to syntax
+
+**Key Concepts:**
+
+1. **Providers** - Cloud provider configuration
+2. **Resources** - Infrastructure to create
+3. **Variables** - Inputs and configuration
+4. **Outputs** - Values to display after apply
+
+**Example: Simple infrastructure**
+
+```hcl
+# main.tf
+
+# 1. Provider: Configure cloud
+provider "aws" {
+  region = "us-west-2"
+}
+
+# 2. Variables: Inputs
+variable "environment" {
+  type    = string
+  default = "dev"
+}
+
+# 3. Resource: Create infrastructure
+resource "aws_instance" "web" {
+  ami           = "ami-12345678"
+  instance_type = var.environment == "prod" ? "t2.large" : "t2.micro"
+
+  tags = {
+    Name = "${var.environment}-web-server"
+  }
+}
+
+# 4. Output: Display info
+output "server_ip" {
+  value = aws_instance.web.public_ip
+}
+```
+
+**That's it!** Write this, run `terraform apply`, get infrastructure.
+
+**Works with:** AWS, Google Cloud, Azure, DigitalOcean, 1000+ providers
+
+---
+
+# Terraform Workflow
+
+## The three commands you'll use
+
+```bash
+# 1. Initialize (download providers, modules)
+terraform init
+
+# 2. Plan (preview changes)
+terraform plan
+# Shows:
+#   + create
+#   ~ modify
+#   - delete
+
+# 3. Apply (make the changes)
+terraform apply
+
+# Bonus: Destroy everything
+terraform destroy
+```
+
+**The workflow:**
+
+1. Write/modify `.tf` files
+2. `terraform plan` (review changes)
+3. Commit to git
+4. Open PR for review
+5. `terraform apply` (after approval)
+
+**Key insight:** Infrastructure changes go through code review!
+
+---
+
+# Part 7: Issues at Scale
+
+## The Stateless Problem
+
+**Setup:** 3 servers behind a load balancer
+
+```mermaid +render
+flowchart LR
+    USER["User"] --> LB["Load Balancer"]
+    LB --> S1["Server 1<br/>(has session)"]
+    LB --> S2["Server 2<br/>(no session)"]
+    LB --> S3["Server 3<br/>(no session)"]
+```
+
+**Request 1:** User logs in -> Server 1 stores session
+
+**Request 2:** Load balancer sends to Server 2 -> "Who are you?"
+
+**User:** "I just logged in!"
+
+---
+
+# Solution: External State Store
+
+```mermaid +render
+flowchart TB
+    USER["User"] --> LB["Load Balancer"]
+    LB --> S1["Server 1"]
+    LB --> S2["Server 2"]
+    LB --> S3["Server 3"]
+
+    S1 --> REDIS["Redis<br/>(Shared State)"]
+    S2 --> REDIS
+    S3 --> REDIS
+```
+
+Now any server can handle any request:
+
+```python
+# BAD: State in memory
+sessions = {}  # Lost if server restarts!
+
+# GOOD: External store
+import redis
+store = redis.Redis(host='redis')
+store.set(f"session:{user_id}", session_data)
+```
+
+---
+
+# Configuration Drift
+
+## When servers become "snowflakes"
+
+**Month 1:** All 3 servers identical
+
+**Month 6:**
+
+- Server 1: Has that hotfix from March
+- Server 2: Missing the security patch
+- Server 3: Someone SSHed in and changed nginx config
+
+**Result:** "It works on server 1 but not server 2"
+
+**The rule:** Don't SSH into production
+
+**The solution:** Infrastructure as Code, immutable deploys
+
+---
+
+# Secrets Management
+
+## Handling sensitive data in production
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**The Problem:**
+
+- API keys, passwords, DB credentials
+- OAuth tokens, encryption keys
+- Can't hardcode - security risk!
+
+**Anti-Patterns (DON'T DO THIS):**
+
+```python
+# NEVER hardcode!
+API_KEY = "sk-1234567890abcdef"
+DB_PASSWORD = "admin123"
+
+# NEVER commit to git!
+# .env file in repository
+```
+
+**Solutions:**
+
+**1. Environment Variables**
+*(Simple, good for most cases)*
+
+```python
+import os
+API_KEY = os.environ["API_KEY"]
+```
+
+**2. Secrets Vaults**
+*(Production-grade)*
+
+- **HashiCorp Vault** - Industry standard
+- **AWS Secrets Manager** - Auto-rotation
+- **Azure Key Vault** - Azure-native
+- **Google Secret Manager** - GCP-native
+
+**3. Encrypted Files**
+
+- **git-crypt** - Encrypt in git
+- **SOPS** - Encrypted YAML/JSON
+
+<!-- column: 1 -->
+
+**Best Practices:**
+
+**✓ DO:**
+- Store in environment variables
+- Use secrets vaults in production
+- Rotate regularly
+- Different secrets per environment
+  - dev, staging, prod
+- Principle of least privilege
+- Add to `.gitignore`
+
+**✗ DON'T:**
+- Hardcode in source code
+- Commit to git
+- Share via email/Slack
+- Use same secrets everywhere
+- Log secrets
+- Store in plain text
+
+**Example: Proper Usage**
+
+```yaml
+# docker-compose.yml
+services:
+  web:
+    environment:
+      API_KEY: ${API_KEY}  # From env
+      DB_PASSWORD: ${DB_PASSWORD}
+```
+
+```bash
+# .env (gitignored!)
+API_KEY=sk-prod-xyz
+DB_PASSWORD=secure-password
+```
+
+**Ties to 12 Factor:** Config in environment (Factor #3)
+
+<!-- reset_layout -->
+
+---
+
+# 12 Factor App: The Top 4
+
+## Patterns that prevent scale bugs
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Factor #1: Config**
+
+**Rule:** Store in environment vars
+
+```python
+# BAD: Hardcoded
+db_url = "postgres://localhost/mydb"
+
+# GOOD: From environment
+import os
+db_url = os.environ["DATABASE_URL"]
+```
+
+**If violated:** Secrets in git history
+
+**Factor #2: Processes**
+
+**Rule:** Stateless, share nothing
+
+```python
+# BAD: State in memory
+sessions = {}  # Lost on restart!
+
+# GOOD: External store
+import redis
+sessions = redis.Redis()
+```
+
+**If violated:** Session lost on restart
+
+<!-- column: 1 -->
+
+**Factor #3: Logs**
+
+**Rule:** Write to stdout/stderr
+
+```python
+# BAD: Log to file
+logging.basicConfig(filename='app.log')
+
+# GOOD: Log to stdout
+logging.basicConfig(stream=sys.stdout)
+```
+
+**If violated:** Can't debug production
+
+**Factor #4: Dev/Prod Parity**
+
+**Rule:** Keep environments similar
+
+- Use same database (Postgres in dev & prod)
+- Same versions
+- Same backing services
+
+**If violated:** "Works on my machine!"
+
+**Why these matter:** They enable horizontal scaling, cloud deployment, and CI/CD
+
+**Learn more:** [12factor.net](https://12factor.net/)
+
+<!-- reset_layout -->
+
+---
+
+# Part 8: Kubernetes (Brief Overview)
+
+## The Orchestration Problem
+
+**You have:**
+
+- 100 containers
+- 20 servers
+- Containers crash sometimes
+- Traffic varies 10x during the day
+
+**Questions:**
+
+- Which container goes on which server?
+- What if a server dies?
+- How do we scale up for traffic?
+- How do we deploy updates without downtime?
+
+---
+
+# What Kubernetes Does
+
+## The container orchestrator
+
+**You declare:** "I want 3 copies of my app running"
+
+**Kubernetes ensures:** That's always true
+
+**What Kubernetes handles:**
+
+1. **Scheduling** - Decides which server runs which container
+2. **Self-healing** - Container dies? K8s starts a new one
+3. **Auto-scaling** - Traffic spike? K8s adds more copies
+4. **Load balancing** - Distributes traffic across containers
+5. **Networking** - Containers can talk to each other
+6. **Rolling updates** - Deploy new versions with zero downtime
+7. **Secret management** - Handles passwords, API keys
+8. **Storage** - Manages persistent volumes
+
+**The magic:** You describe desired state, K8s makes it happen
+
+---
+
+# When to Use Kubernetes
+
+## Spoiler: Probably not yet
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**You DON'T need K8s if:**
+
+- ✗ Small team (< 10 engineers)
+- ✗ Few services (< 10)
+- ✗ Predictable, low traffic
+- ✗ Just starting out
+- ✗ Simple monolith
+- ✗ One-server deployment works
+
+**Instead use:**
+- Single-server Docker
+- Docker Compose
+- Managed services:
+  - Heroku
+  - Cloud Run
+  - App Engine
+  - Railway
+  - Fly.io
+
+**These are easier and cheaper!**
+
+<!-- column: 1 -->
+
+**You MIGHT need K8s if:**
+
+- ✓ Large team with many services
+- ✓ Complex deployment requirements
+- ✓ Need fine-grained scaling
+- ✓ Multi-region deployment
+- ✓ Have platform engineering team
+- ✓ 100+ microservices
+- ✓ Need custom networking/security
+
+**Signs you're ready:**
+- Outgrowing managed services
+- Need control over infrastructure
+- Team can handle complexity
+- Budget for dedicated platform team
+
+**Reality check:**
+Most startups don't need K8s for years
+
+<!-- reset_layout -->
+
+**K8s adds complexity. Make sure you need it.**
+
+---
+
+# Docker Swarm vs Kubernetes
+
+## Two container orchestrators, different philosophies
+
+<!-- column_layout: [1, 1] -->
+
+<!-- column: 0 -->
+
+**Docker Swarm**
+
+**Philosophy:** Simple, batteries-included
+
+**Setup:** 5 minutes
+```bash
+docker swarm init
+```
+
+**Learning curve:** Easy
+- If you know Docker, you know Swarm
+- Familiar commands
+- Minimal new concepts
+
+**Features:**
+- Basic orchestration
+- Load balancing
+- Service scaling
+- Rolling updates
+
+**Ecosystem:** Limited, Docker-focused
+
+**Best for:**
+- Small teams (< 5 engineers)
+- Simple deployments
+- Learning orchestration
+- Docker-native projects
+
+<!-- column: 1 -->
+
+**Kubernetes (K8s)**
+
+**Philosophy:** Powerful, flexible, industry standard
+
+**Setup:** Hours/days
+- Complex configuration
+- Many moving parts
+- Managed services help
+
+**Learning curve:** Steep
+- New concepts (Pods, Services, Deployments)
+- YAML manifests
+- kubectl CLI
+
+**Features:** Everything
+- Auto-scaling (HPA, VPA)
+- Self-healing
+- Rolling updates & rollbacks
+- Service mesh support
+- Secrets & ConfigMaps
+- StatefulSets, DaemonSets
+
+**Ecosystem:** Massive
+- Helm charts
+- Operators
+- Cloud-native landscape
+
+**Best for:**
+- Production at scale
+- Enterprise (multi-cloud)
+- Complex microservices
+- Job requirements (industry standard)
+
+<!-- reset_layout -->
+
+**Reality check:** K8s has won. Most new projects use K8s or K8s-based managed services.
+
+**But:** Don't use either unnecessarily! Single-server Docker or simple managed services work for most use cases.
+
+---
+
+# Part 9: Wrap-up
+
+## The Big Picture
+
+```mermaid +render
+flowchart TB
+    subgraph Layer1["Primitives"]
+        CG["cgroups"] --- NS["namespaces"] --- CH["chroot"]
+    end
+
+    subgraph Layer2["Containers"]
+        DOCKER["Docker/Podman"]
+    end
+
+    subgraph Layer3["Automation"]
+        GIT["Git"] --- CI["CI/CD"]
+    end
+
+    subgraph Layer4["Infrastructure"]
+        CLOUD["Cloud"] --- K8S["(Maybe K8s)"]
+    end
+
+    Layer1 -->|"packages into"| Layer2
+    Layer2 -->|"automated by"| Layer3
+    Layer3 -->|"deployed to"| Layer4
+```
+
+---
+
+# Key Takeaways
+
+1. **Containers = processes** with cgroups + namespaces + chroot
+
+1. **Docker** made containers usable (great DX)
+
+1. **DevOps** is culture, not tools (shared responsibility)
+
+1. **CI/CD** automates the boring, error-prone parts
+
+1. **The Cloud** is abstraction over infrastructure
+
+1. **12 Factor** patterns prevent scale bugs
+
+1. **Start simple** - add complexity when you need it
+
+---
+
+# What to Learn Next
+
+**Immediate (this month):**
+
+- Write a Dockerfile for a personal project
+- Set up GitHub Actions for a repo
+- Deploy something to a cloud provider (free tier!)
+
+**Soon (next 3 months):**
+
+- Docker Compose for multi-container apps
+- Basic cloud services (VMs, storage, databases)
+- More advanced CI/CD (staging environments)
+
+**Later (when you need it):**
+
+- Kubernetes (when you have 10+ services)
+- Infrastructure as Code (Terraform)
+- Advanced observability (metrics, tracing)
+
+---
+
+# Resources
+
+**Containers:**
+
+- [Docker Get Started](https://docs.docker.com/get-started/)
+- [Docker Hub](https://hub.docker.com/)
+
+**CI/CD:**
+
+- [GitHub Actions Docs](https://docs.github.com/en/actions)
+- [act - Local Actions Testing](https://github.com/nektos/act)
+
+**Scale Patterns:**
+
+- [12 Factor App](https://12factor.net/)
+
+**Career:**
+
+- [DevOps Roadmap](https://roadmap.sh/devops)
+
+---
+
+# Questions
+
+## Open floor for discussion
+
+**Topics we can dig into:**
+
+- Specific tools or workflows
+- Career advice
+- "How would you deploy X?"
+- Anything from today's content

@@ -1,0 +1,65 @@
+version: '3'
+
+vars:
+  SLIDES: devops_pres.md
+  NOTES: devops_notes.md
+  THEME: gruvbox-dark
+  PDF_OUTPUT: devops_slides.pdf
+  HTML_OUTPUT: devops_slides.html
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - go-task --list
+
+  present:
+    desc: Start the slideshow presentation
+    cmds:
+      - presenterm -t {{.THEME}} {{.SLIDES}}
+
+  pdf:
+    desc: Export slides to PDF
+    cmds:
+      - presenterm --export-pdf --output {{.PDF_OUTPUT}} {{.SLIDES}}
+      - echo "PDF exported to {{.PDF_OUTPUT}}"
+
+  html:
+    desc: Export slides to HTML
+    cmds:
+      - presenterm -E -o {{.HTML_OUTPUT}} {{.SLIDES}}
+      - echo "HTML exported to {{.HTML_OUTPUT}}"
+
+  lint:
+    desc: Lint all markdown files
+    cmds:
+      - task: lint:md
+      - task: lint:presenterm
+
+  lint:md:
+    desc: Lint markdown files with markdownlint
+    cmds:
+      - mdl {{.SLIDES}} {{.NOTES}} || true
+
+  lint:presenterm:
+    desc: Validate slides fit within terminal and snippets are valid
+    cmds:
+      - presenterm --validate-overflows {{.SLIDES}}
+      - presenterm --validate-snippets {{.SLIDES}}
+
+  themes:
+    desc: List available presenterm themes
+    cmds:
+      - presenterm --list-themes
+
+  clean:
+    desc: Remove generated files
+    cmds:
+      - rm -f {{.PDF_OUTPUT}} {{.HTML_OUTPUT}}
+      - echo "Cleaned generated files"
+
+  check:
+    desc: Run all checks (lint + validate)
+    cmds:
+      - task: lint
+      - echo "All checks passed!"
